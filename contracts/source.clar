@@ -4,25 +4,25 @@
 ;; Define data variables
 (define-data-var contract-owner principal tx-sender)
 (define-map products 
-    { product-id: (string-utf8 36) }
+    { product-id: (string-ascii 36) }
     { 
         manufacturer: principal,
         timestamp: uint,
         current-owner: principal,
-        status: (string-utf8 20),
+        status: (string-ascii 12),  ;; Increased to accommodate "registered"
         verified: bool
     }
 )
 
 (define-map product-history
     { 
-        product-id: (string-utf8 36),
+        product-id: (string-ascii 36),
         timestamp: uint
     }
     {
         owner: principal,
-        action: (string-utf8 20),
-        location: (string-utf8 50)
+        action: (string-ascii 12),  ;; Increased to match status length
+        location: (string-ascii 50)
     }
 )
 
@@ -33,24 +33,25 @@
 (define-constant ERR-INVALID-STATUS (err u103))
 
 ;; Read-only functions
-(define-read-only (get-product-details (product-id (string-utf8 36)))
-    (match (map-get? products { product-id: product-id })
-        success success
-        error (err ERR-PRODUCT-NOT-FOUND)
-    )
+(define-read-only (get-product-details (product-id (string-ascii 36)))
+    (ok (match (map-get? products { product-id: product-id })
+        product (some product)
+        none))
 )
 
-(define-read-only (get-product-history (product-id (string-utf8 36)) (timestamp uint))
-    (map-get? product-history { product-id: product-id, timestamp: timestamp })
+(define-read-only (get-product-history (product-id (string-ascii 36)) (timestamp uint))
+    (ok (match (map-get? product-history { product-id: product-id, timestamp: timestamp })
+        entry (some entry)
+        none))
 )
 
 ;; Public functions
 (define-public (register-product 
-    (product-id (string-utf8 36))
-    (location (string-utf8 50)))
-    (let ((timestamp (get-block-height)))
-        (if (map-get? products { product-id: product-id })
-            (err ERR-PRODUCT-EXISTS)
+    (product-id (string-ascii 36))
+    (location (string-ascii 50)))
+    (let ((timestamp block-height))
+        (match (map-get? products { product-id: product-id })
+            existing-product (err ERR-PRODUCT-EXISTS)
             (begin
                 (map-set products
                     { product-id: product-id }
@@ -77,12 +78,12 @@
 )
 
 (define-public (transfer-product
-    (product-id (string-utf8 36))
+    (product-id (string-ascii 36))
     (new-owner principal)
-    (location (string-utf8 50)))
+    (location (string-ascii 50)))
     (let (
         (product (unwrap! (map-get? products { product-id: product-id }) (err ERR-PRODUCT-NOT-FOUND)))
-        (timestamp (get-block-height))
+        (timestamp block-height)
     )
         (if (is-eq tx-sender (get current-owner product))
             (begin
@@ -110,11 +111,12 @@
 )
 
 (define-public (verify-product
-    (product-id (string-utf8 36))
-    (location (string-utf8 50)))
+    (product-id (string-ascii 36))
+    (new-owner principal)
+    (location (string-ascii 50)))
     (let (
         (product (unwrap! (map-get? products { product-id: product-id }) (err ERR-PRODUCT-NOT-FOUND)))
-        (timestamp (get-block-height))
+        (timestamp block-height)
     )
         (if (is-eq tx-sender (get current-owner product))
             (begin
